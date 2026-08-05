@@ -1,0 +1,6 @@
+# Rust / Cargo
+/target
+Cargo.lock
+
+# Tauri 生成的产物
+/gen

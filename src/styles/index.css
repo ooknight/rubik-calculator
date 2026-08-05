@@ -1,0 +1,568 @@
+:root {
+  --bg: #f5f7fa;
+  --panel: #ffffff;
+  --border: #d9dee5;
+  --text: #1f2733;
+  --muted: #8a94a6;
+  --accent: #2d6cdf;
+  --accent-soft: #e8f0fe;
+  --error: #d6453d;
+  --error-soft: #fdecea;
+  --readonly: #eef1f5;
+  --rowresult: #fff7e6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 16px;
+  gap: 12px;
+}
+
+.app__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.app__header h1 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.toolbar__label {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbar__group {
+  display: flex;
+  gap: 6px;
+}
+
+.toolbar button {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.toolbar button:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.toolbar button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.toolbar__places {
+  align-items: center;
+}
+
+.toolbar__places label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.toolbar__select {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.toolbar__select:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.toolbar__select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.grid-wrap {
+  flex: 1;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.grid {
+  display: grid;
+  gap: 4px;
+  min-width: max-content;
+}
+
+.grid__rownum {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  position: sticky;
+  left: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+
+.grid__corner,
+.grid__head,
+.grid__total-label {
+  font-weight: 600;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  padding: 4px 6px;
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 2;
+}
+
+/* 列名表头行：参数1/参数2 列名可编辑输入 */
+.grid__corner--sub {
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.grid__head--sub {
+  justify-content: flex-end;
+  border-left: 2px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.grid__subhead {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  padding: 2px 0;
+}
+
+.grid__subhead--op {
+  padding: 3px 0;
+}
+
+.grid__subhead--result {
+  justify-content: flex-end;
+  border-left: 2px solid var(--border);
+  padding-right: 8px;
+}
+
+/* 列名可编辑输入框 */
+.cell--header-input {
+  border: 1px dashed var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+  text-align: center;
+  padding: 4px 6px;
+  border-bottom: 2px solid var(--border);
+  box-sizing: border-box;
+}
+
+.cell--header-input::placeholder {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.cell--header-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.grid__head,
+.grid__total-label {
+  justify-content: flex-end;
+  border-left: 2px solid var(--border);
+  padding-left: 8px;
+}
+
+.cell {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: var(--panel);
+  font-size: 14px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 自适应宽度输入框：宽度由 JS 按文字测量设置，不撑满列 */
+.cell--autosize {
+  width: auto;
+  min-width: 24px;
+  box-sizing: content-box;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 需填满所在列的格（结果/行结果/合计/等号） */
+.cell--eq,
+.cell--result,
+.cell--rowresult,
+.cell--total {
+  width: 100%;
+}
+
+.cell:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.cell--op {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  padding: 2px 0;
+  /* 纯图标：去掉输入框边框与白底 */
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  font: inherit;
+  background: transparent;
+  border: none;
+}
+
+/* 可点击切换的运算符（表头） */
+.cell--op-btn {
+  cursor: pointer;
+  transition: transform 0.08s, background-color 0.15s;
+}
+
+.cell--op-btn:hover {
+  background-color: var(--accent-soft);
+  border-radius: 10px;
+}
+
+.cell--op-btn:active {
+  transform: scale(0.88);
+}
+
+.cell--op-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+  border-radius: 10px;
+}
+
+/* 只读展示的运算符（数据行）：不可点击、无交互反馈 */
+.cell--op-static {
+  cursor: default;
+}
+
+/* 运算符 SVG 图标配色 */
+.cell--op svg {
+  color: var(--accent);
+}
+
+/* 下拉展开项样式（选项背景） */
+.cell--op option {
+  color: var(--text);
+  background: var(--panel);
+  text-align: center;
+}
+
+.cell--eq {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+}
+
+.cell--eq svg {
+  color: var(--muted);
+}
+
+.cell--readonly {
+  background: var(--readonly);
+  color: var(--muted);
+  cursor: default;
+}
+
+.cell--result {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  background: var(--panel);
+  font-weight: 600;
+  color: var(--text);
+  border-style: dashed;
+  border-color: var(--border);
+  font-variant-numeric: tabular-nums;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+/* 计算出有效结果后高亮：绿色背景，多个结果时由内联样式按序号加深 */
+.cell--result.is-filled {
+  background: var(--accent-soft);
+  color: var(--text);
+  border-style: solid;
+  border-color: #b7e0c2;
+}
+
+.cell--error {
+  background: var(--error-soft);
+  color: var(--error);
+}
+
+.cell--skipped {
+  background: repeating-linear-gradient(
+    45deg,
+    #f3f5f8,
+    #f3f5f8 4px,
+    #e9edf2 4px,
+    #e9edf2 8px
+  );
+  color: var(--muted);
+}
+
+.cell--rowresult {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  background: var(--rowresult);
+  font-weight: 700;
+  border-left: 2px solid var(--border);
+  padding-right: 8px;
+}
+
+.cell--total {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  background: var(--bg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.grid__total-label {
+  justify-content: flex-end;
+}
+
+.grid__total {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 6px 8px;
+  font-weight: 700;
+  color: var(--text);
+  border-top: 2px solid var(--border);
+}
+
+.grid__total--grand {
+  border-left: 2px solid var(--border);
+  color: var(--muted);
+}
+
+/* 分组属性列：蓝色系背景与运算项列区分 */
+.cell--attr {
+  background: #dbeafe;
+  text-align: left;
+}
+
+.cell--header-input.attr-header {
+  background: #dbeafe;
+}
+
+/* 运算项列：去掉特殊样式，回归默认格样式 */
+.cell--opcol,
+.cell--opitem,
+.cell--header-input.op-header {
+  background-color: var(--panel);
+}
+
+.cell--opitem {
+  text-align: right;
+}
+
+.grid__subhead.subhead--opcol {
+  background: var(--panel);
+}
+
+/* 运算项结果格：回归默认结果格样式 */
+.cell--result.cell--opcol {
+  background-color: var(--panel);
+  border-style: dashed;
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.cell--result.cell--opcol.is-filled {
+  background: var(--accent-soft);
+  color: var(--text);
+  border-style: solid;
+  border-color: #b7e0c2;
+}
+
+/* 分组统计区块 */
+.group-stats {
+  margin-top: 8px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(20, 30, 50, 0.04);
+}
+
+.group-stats__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+/* 每个结果列单独成表 */
+.group-stats__tables {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.group-stats__table {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(20, 30, 50, 0.04);
+}
+
+.group-stats__tabletitle {
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--border);
+}
+
+.group-stats__cols {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding: 12px;
+}
+
+.group-stats__col {
+  min-width: 140px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.group-stats__coltitle {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--border);
+}
+
+.group-stats__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 10px;
+  font-size: 13px;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.group-stats__row:last-child {
+  border-bottom: none;
+}
+
+.group-stats__val {
+  color: var(--text);
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
+.group-stats__sums {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.group-stats__sumitem {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.group-stats__sum {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+
+
+.group-stats__count {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.group-stats__empty {
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 12px;
+}

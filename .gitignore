@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build output
+dist/
+dist-ssr/
+build/
+out/
+
+# Tauri
+/src-tauri/target/
+/src-tauri/gen/
+/src-tauri/gen.schema.json
+
+# Rust
+**/*.rs.bk
+*.pdb
+
+# Generated icons (produced by scripts/gen-icons.ps1 / tauri icon)
+/src-tauri/icons/
+!src-tauri/icons/.gitkeep
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Coverage / test
+coverage/
+*.tsbuildinfo
