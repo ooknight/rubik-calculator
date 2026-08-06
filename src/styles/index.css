@@ -195,6 +195,7 @@ body {
 
 .grid__subhead--op {
   padding: 3px 0;
+  justify-self: center;
 }
 
 .grid__subhead--result {
@@ -281,7 +282,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  justify-self: start;
+  justify-self: center;
   min-width: 0;
   width: auto;
   color: var(--accent);
@@ -342,7 +343,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  justify-self: start;
+  justify-self: center;
   min-width: 0;
   width: auto;
   padding: 0;
@@ -471,9 +472,8 @@ body {
 
 .grid__subhead.subhead--opcol {
   background: var(--panel);
-  /* 与数据行的运算符/等号（.cell--op / .cell--eq）保持一致：
-     紧凑贴左、不拉伸、无水平内边距，使表头与数据行对齐且紧挨前后输入框 */
-  justify-self: start;
+  /* 与数据行的运算符/等号（.cell--op / .cell--eq）保持一致：水平居中，左右间距对称 */
+  justify-self: center;
   width: auto;
   padding: 0;
 }
@@ -534,7 +534,6 @@ body {
   font-size: 13px;
   font-weight: 700;
   color: var(--text);
-  background: var(--accent-soft);
   border-bottom: 1px solid var(--border);
 }
 
@@ -557,7 +556,6 @@ body {
   font-size: 12px;
   font-weight: 700;
   color: var(--text);
-  background: var(--accent-soft);
   border-bottom: 1px solid var(--border);
 }
 

@@ -60,8 +60,8 @@ export interface GroupHeader {
   result: string; // 结果列名（每组一列，可编辑）
 }
 
-const defaultHeader = (): GroupHeader => ({ param1: '数字1', param2: '数字2', result: '结果' });
-const defaultAttrHeader = (idx: number): string => `分组${idx + 1}`;
+const defaultHeader = (): GroupHeader => ({ param1: '数字', param2: '数字', result: '结果' });
+const defaultAttrHeader = (idx: number): string => `分组`;
 
 export const useGridStore = create<GridState>((set, get) => ({
   rows: Array.from({ length: DEFAULT_ROWS }, () => makeRow(DEFAULT_GROUPS, 0)),
