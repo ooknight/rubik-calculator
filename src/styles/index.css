@@ -247,7 +247,6 @@ body {
 .cell--eq,
 .cell--result {
   margin-bottom: 2px;
-}
   background: var(--panel);
   font-size: 14px;
   color: var(--text);
