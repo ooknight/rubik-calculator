@@ -10,6 +10,7 @@
   --error-soft: #fdecea;
   --readonly: #eef1f5;
   --rowresult: #fff7e6;
+  --mono: Consolas, 'SFMono-Regular', 'Courier New', monospace;
 }
 
 * {
@@ -24,8 +25,8 @@ body,
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
-    'Microsoft YaHei', sans-serif;
+  font-family: ui-monospace, 'SFMono-Regular', 'Cascadia Code', Menlo, Consolas,
+    'Courier New', monospace, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   background: var(--bg);
   color: var(--text);
   font-size: 14px;
@@ -133,14 +134,25 @@ body {
 
 .grid {
   display: grid;
-  gap: 4px;
+  gap: 0;
+  width: max-content;
   min-width: max-content;
+}
+
+/* 标题行与数据区域之间的分割线：占满所有列，上下均留间距 */
+.grid__divider {
+  grid-column: 1 / -1;
+  height: 2px;
+  background: var(--border);
+  margin-top: 5px;
+  margin-bottom: 5px;
 }
 
 .grid__rownum {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  padding-right: 12px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   position: sticky;
@@ -163,12 +175,6 @@ body {
   z-index: 2;
 }
 
-/* 列名表头行：参数1/参数2 列名可编辑输入 */
-.grid__corner--sub {
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
-}
-
 .grid__head--sub {
   justify-content: flex-end;
   border-left: 2px solid var(--border);
@@ -184,7 +190,6 @@ body {
   font-size: 12px;
   font-weight: 600;
   background: var(--panel);
-  border-bottom: 1px solid var(--border);
   padding: 2px 0;
 }
 
@@ -196,6 +201,8 @@ body {
   justify-content: flex-end;
   border-left: 2px solid var(--border);
   padding-right: 8px;
+  min-width: var(--base-width, 4ch);
+  justify-self: start;
 }
 
 /* 列名可编辑输入框 */
@@ -207,13 +214,10 @@ body {
   font-size: 13px;
   text-align: center;
   padding: 4px 6px;
-  border-bottom: 2px solid var(--border);
+  border: 1px dashed var(--border);
   box-sizing: border-box;
-}
-
-.cell--header-input::placeholder {
-  color: var(--muted);
-  opacity: 0.7;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .cell--header-input:focus {
@@ -234,24 +238,35 @@ body {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 6px 8px;
+}
+
+/* 数据区域每行单元格下间距 2px（仅数据行，不影响表头与分割线） */
+.grid__rownum,
+.cell--autosize,
+.cell--op,
+.cell--eq,
+.cell--result {
+  margin-bottom: 2px;
+}
   background: var(--panel);
   font-size: 14px;
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 
-/* 自适应宽度输入框：宽度由 JS 按文字测量设置，不撑满列 */
+/* 自适应宽度输入框：宽度由 JS 按文字测量设置，不撑满列；
+   与全局盒模型保持一致（border-box），避免与表头输入框宽度计算方式不一致 */
 .cell--autosize {
   width: auto;
-  min-width: 24px;
-  box-sizing: content-box;
+  min-width: var(--base-width, 4ch);
+  box-sizing: border-box;
   text-align: right;
+  justify-self: start;
+  font-family: var(--mono);
   font-variant-numeric: tabular-nums;
 }
 
-/* 需填满所在列的格（结果/行结果/合计/等号） */
-.cell--eq,
-.cell--result,
+/* 需填满所在列的格（行结果/合计） */
 .cell--rowresult,
 .cell--total {
   width: 100%;
@@ -267,8 +282,11 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  justify-self: start;
+  min-width: 0;
+  width: auto;
   color: var(--accent);
-  padding: 2px 0;
+  padding: 0;
   /* 纯图标：去掉输入框边框与白底 */
   appearance: none;
   -webkit-appearance: none;
@@ -276,6 +294,11 @@ body {
   font: inherit;
   background: transparent;
   border: none;
+}
+
+/* 运算符 SVG 图标默认配色（表头可点击按钮用此蓝色） */
+.cell--op svg {
+  color: var(--accent);
 }
 
 /* 可点击切换的运算符（表头） */
@@ -299,14 +322,14 @@ body {
   border-radius: 10px;
 }
 
-/* 只读展示的运算符（数据行）：不可点击、无交互反馈 */
+/* 只读展示的运算符（数据行）：不可点击、无交互反馈，使用灰色区分于表头蓝色 */
 .cell--op-static {
   cursor: default;
+  color: var(--muted);
 }
 
-/* 运算符 SVG 图标配色 */
-.cell--op svg {
-  color: var(--accent);
+.cell--op-static svg {
+  color: var(--muted);
 }
 
 /* 下拉展开项样式（选项背景） */
@@ -320,6 +343,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  justify-self: start;
+  min-width: 0;
+  width: auto;
+  padding: 0;
   background: transparent;
   border: none;
   color: var(--muted);
@@ -339,11 +366,18 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  /* 默认宽度与数字列一致（baseWidth），内容更长时自动撑开 */
+  width: auto;
+  min-width: var(--base-width, 4ch);
+  /* 关键：grid item 默认会 stretch 填满列轨道，导致短结果被拉宽到整列最宽；
+     设为 start 才能按自身内容宽度收缩，实现逐格随内容自适应 */
+  justify-self: start;
   background: var(--panel);
   font-weight: 600;
   color: var(--text);
   border-style: dashed;
   border-color: var(--border);
+  font-family: var(--mono);
   font-variant-numeric: tabular-nums;
   transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
 }
@@ -415,6 +449,8 @@ body {
 .cell--attr {
   background: #dbeafe;
   text-align: left;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .cell--header-input.attr-header {
@@ -430,10 +466,22 @@ body {
 
 .cell--opitem {
   text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .grid__subhead.subhead--opcol {
   background: var(--panel);
+  /* 与数据行的运算符/等号（.cell--op / .cell--eq）保持一致：
+     紧凑贴左、不拉伸、无水平内边距，使表头与数据行对齐且紧挨前后输入框 */
+  justify-self: start;
+  width: auto;
+  padding: 0;
+}
+
+/* 表头等号图标：与表头运算符按钮一致，使用蓝色（accent） */
+.subhead--eq svg {
+  color: var(--accent);
 }
 
 /* 运算项结果格：回归默认结果格样式 */

@@ -157,4 +157,4 @@ export function computeGrid(rows: Group[][]): ComputeOutput {
   return { rows: rowResults, columnTotals, param1Totals, param2Totals };
 }
 
-export { parseOperand };
+export { parseOperand, applyOp };

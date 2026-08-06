@@ -1,4 +1,4 @@
-import { KeyboardEvent, useEffect, useLayoutEffect, useRef } from 'react';
+import { Fragment, KeyboardEvent, useEffect, useLayoutEffect, useRef } from 'react';
 import Decimal from 'decimal.js';
 import { useGridStore } from '../store/store';
 import { ComputeOutput, Cell, Operator, OPERATORS, OP_SYMBOLS } from '../core/types';
@@ -15,20 +15,53 @@ function measureTextWidth(text: string, font: string): number {
   return measureCtx.measureText(text).width;
 }
 
-const INPUT_FONT =
-  '14px -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif';
+const MONO_FONT = "Consolas, 'SFMono-Regular', 'Courier New', monospace";
+const INPUT_FONT = `14px ${MONO_FONT}`;
 
-// 根据输入值动态设置 input 宽度，跟随文字大小自动调整；minWidth 用于多行统一为最大值
-function useAutoSize(value: string, font: string = INPUT_FONT, minWidth: number = 0) {
-  const ref = useRef<HTMLInputElement>(null);
+// 列索引映射（1-based grid 列号），去掉 display:contents 后每个单元格用 gridColumn 显式定位，
+// 直接作为 .grid 容器的子元素参与对齐：
+//   1                行号
+//   2 .. 1+attrCount 分组属性列
+//   2+attrCount      第0组项1
+//   之后每组(g>=1)：  op / param2 / eq / result 占 4 列
+interface ColMap {
+  C_ROWNUM: number;
+  colItem1: number;
+  colOp: (g: number) => number;
+  colParam2: (g: number) => number;
+  colEq: (g: number) => number;
+  colResult: (g: number) => number;
+}
+function makeColMap(attrCount: number): ColMap {
+  const C_ROWNUM = 1;
+  const colItem1 = 2 + attrCount;
+  const groupStart = (g: number) => (g === 0 ? colItem1 : colItem1 + 1 + (g - 1) * 4);
+  return {
+    C_ROWNUM,
+    colItem1,
+    colOp: (g) => groupStart(g),
+    colParam2: (g) => groupStart(g) + 1,
+    colEq: (g) => groupStart(g) + 2,
+    colResult: (g) => groupStart(g) + 3,
+  };
+}
+
+// 失焦时数值会被格式化为带尾零的形式（如 123 -> 123.00），但列宽应基于
+// 单元格文本在等宽字体下的像素宽度（含左右 padding），统一在测量点使用
+
+// 根据输入值动态设置元素宽度，跟随文字大小自动调整；minWidth 用于多行统一为最大值
+// 同时支持 input 与 div（结果格为 div），保证结果列与数字列采用同一套自适应机制
+function useAutoSize<T extends HTMLElement>(value: string, _font: string = INPUT_FONT, minWidth: number = 0) {
+  const ref = useRef<T>(null);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const padding = 16; // 左右 padding 合计
-    const base = 24; // 至少显示一个字符的宽度余地
-    const w = Math.max(base, minWidth, measureTextWidth(value || '', font) + padding);
+    const base = measureTextWidth('0000', INPUT_FONT); // 默认至少 4 个字符宽度
+    // 直接按当前显示文本测量（传入的 value 已是格式化后的显示值，含强制的小数点/尾零），
+    // 不再 strip 尾零，避免结果列/数字列显示 "123.00" 时宽度偏小导致溢出。
+    const w = Math.max(base, minWidth, measureTextWidth(value, INPUT_FONT) + 16);
     el.style.width = `${w}px`;
-  }, [value, font, minWidth]);
+  }, [value, minWidth]);
   return ref;
 }
 
@@ -147,6 +180,9 @@ export function CalculatorGrid({ output }: Props) {
 
   const groupCount = rows[0]?.groups.length ?? 0;
   const attrCount = rows[0]?.attributes.length ?? 0;
+
+  // 列索引映射：每个单元格用 gridColumn 显式定位（方案 B：扁平结构，无 display:contents）
+  const { C_ROWNUM, colItem1, colOp, colParam2, colEq, colResult } = makeColMap(attrCount);
   // 第 0 组（数字1）不单独带结果列；结果列由运算项组（group>0）承担，无运算项时即无结果列
   const group0HasResult = false;
   // 所有带结果列的组索引（用于结果列渲染与绿色渐变）
@@ -156,31 +192,79 @@ export function CalculatorGrid({ output }: Props) {
   // 分组统计维度：无运算项时（仅一列数字）以第 0 组数值作为统计列；有运算项时按结果列分组
   const statsGroups = groupCount <= 1 ? [0] : resultGroups;
   // 每个运算项组（g>=1）在所有行（含表头）中的最大文字宽度，使多行运算项统一宽度
+  // 数字列/属性列宽度计算：必须基于“显示值”（失焦后 formatNumberText/toFixed 强制加上的
+  // 小数点与尾零，如 123 -> "123.00"），否则列宽按原始输入字符串测量会少算小数点位置，
+  // 导致失焦格式化后文本超出单元格（溢出）。因此统一用 displayValue() 格式化后再测量。
+  const cellWidthOf = (t: string) => measureTextWidth(formatNumberText(t, decimalPlaces), INPUT_FONT) + 16;
   const opMaxWidths: number[] = [];
   for (let g = 1; g < groupCount; g++) {
     let max = 0;
     const consider = (t: string) => {
-      const w = measureTextWidth(t || '', INPUT_FONT) + 16;
+      const w = cellWidthOf(t);
       if (w > max) max = w;
     };
     rows.forEach((row) => consider(row.groups[g]?.param2 ?? ''));
     consider(headers[g]?.param2 ?? '');
     opMaxWidths[g] = max;
   }
+    // 第 0 组项1（数字1）在所有行（含表头）中的最大文字宽度，使该列统一宽度；至少 4 字符宽
+  const baseWidth = measureTextWidth('0000', INPUT_FONT) + 16;
+  let itemMaxWidth = baseWidth;
+  {
+    const consider = (t: string) => {
+      const w = cellWidthOf(t);
+      if (w > itemMaxWidth) itemMaxWidth = w;
+    };
+    rows.forEach((row) => consider(row.groups[0]?.param1 ?? ''));
+    consider(headers[0]?.param1 ?? '');
+  }
+  // 分组属性列：每列在所有行（含表头）中的最大文字宽度，使各属性列统一宽度
+  const attrMaxWidths: number[] = [];
+  for (let a = 0; a < attrCount; a++) {
+    let max = 0;
+    const consider = (t: string) => {
+      const w = cellWidthOf(t);
+      if (w > max) max = w;
+    };
+    rows.forEach((row) => consider(row.attributes[a] ?? ''));
+    consider(attributeHeaders[a] ?? '');
+    attrMaxWidths[a] = Math.max(max, measureTextWidth('0000', INPUT_FONT) + 16);
+  }
+  // 结果列：与数字列一样，整列统一到该列所有结果文本的最大宽度（至少 baseWidth），
+  // 使结果列像数字列那样对齐整齐，同时内容变长时整列自动变宽。
+  // 注意：结果格渲染的是 cellText() 格式化后的文本（如 "1235.00"，含尾零），
+  // 所以宽度计算必须直接用渲染文本测量，不能用 stripForWidth（会去掉 .00 导致偏小溢出）。
+  const resultColMaxWidth: number[] = [];
+  for (let g = 0; g < groupCount; g++) {
+    let max = baseWidth;
+    const considerRaw = (t: string) => {
+      const w = measureTextWidth(t, INPUT_FONT) + 16;
+      if (w > max) max = w;
+    };
+    considerRaw(headers[g]?.result ?? '');
+    rows.forEach((_row, r) => {
+      const gr = output.rows[r]?.groups[g];
+      if (gr && gr.result.kind !== 'error') considerRaw(cellText(gr.result, decimalPlaces));
+    });
+    resultColMaxWidth[g] = max;
+  }
   const gridRef = useRef<HTMLDivElement>(null);
-  // 第 0 组为裸项：项(auto) [+ 结果(auto，仅当无运算项时)]
-  // 分组属性列：auto（插在裸项之后、运算项之前）
-  // 其余组：运算符(52) + 项(auto) + =(52) + 结果(auto，按内容自适应)
-  const itemCols = group0HasResult ? 'auto auto' : 'auto';
-  const opCols = '52px auto 52px auto';
-  const opGroupTemplate =
-    groupCount > 1 ? Array.from({ length: groupCount - 1 }, () => opCols).join(' ') : '';
-  const attrTemplate = attrCount > 0 ? Array.from({ length: attrCount }, () => 'auto').join(' ') : '';
-  const parts = ['48px'];
-  if (attrTemplate) parts.push(attrTemplate);
-  parts.push(itemCols);
-  if (opGroupTemplate) parts.push(opGroupTemplate);
-  const gridTemplateColumns = parts.join(' ');
+  // 显式列宽数组（1-based 索引 = grid 列号），同时驱动 gridTemplateColumns 与每个单元格宽度，
+  // 保证表头与数据行严格等宽对齐（不再依赖 auto 轨道的不确定性）
+  const COL_ROWNUM_W = 48;
+  const COL_OP_W = 52;
+  const COL_EQ_W = 52;
+  const colWidths: number[] = [];
+  colWidths[C_ROWNUM - 1] = COL_ROWNUM_W;
+  for (let a = 0; a < attrCount; a++) colWidths[(2 + a) - 1] = attrMaxWidths[a] ?? baseWidth;
+  colWidths[colItem1 - 1] = itemMaxWidth;
+  for (let g = 1; g < groupCount; g++) {
+    colWidths[colOp(g) - 1] = COL_OP_W;
+    colWidths[colParam2(g) - 1] = opMaxWidths[g] ?? baseWidth;
+    colWidths[colEq(g) - 1] = COL_EQ_W;
+    colWidths[colResult(g) - 1] = resultColMaxWidth[g];
+  }
+  const gridTemplateColumns = colWidths.map((w) => `${w}px`).join(' ');
 
   // 通过 data 属性定位焦点：data-r / data-g / data-f(ield)
   const focusField = (r: number, g: number, field: string) => {
@@ -202,9 +286,9 @@ export function CalculatorGrid({ output }: Props) {
   ) => {
     const key = e.key;
     // 第 0 组为裸项，无运算符；g>0 组的运算符切换在表头，这里忽略
-    if (key === 'Enter') {
+    if (key === 'Enter' || key === '+') {
       e.preventDefault();
-      // 裸项回车：若有运算项则跳到第一项 param2，否则跳下一行裸项
+      // 裸项回车/加号：若有运算项则跳到第一项 param2，否则跳下一行裸项
       const hasOp = groupCount > 1;
       if (hasOp) focusField(r, 1, 'param2');
       else focusField(r + 1 < rows.length ? r + 1 : 0, 0, 'param1');
@@ -212,50 +296,56 @@ export function CalculatorGrid({ output }: Props) {
   };
 
   const onParam2KeyDown = (e: KeyboardEvent<HTMLInputElement>, r: number, g: number) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' || e.key === '+') {
       e.preventDefault();
-      // 运算项回车：跳下一行同组项；若无下一行则回到首行同组
+      // 运算项回车/加号：跳下一行同组项；若无下一行则回到首行同组
       focusField(r + 1 < rows.length ? r + 1 : 0, g, 'param2');
     }
   };
 
   return (
     <div className="grid-wrap">
-      <div className="grid" ref={gridRef} style={{ gridTemplateColumns }}>
+      <div
+        className="grid"
+        ref={gridRef}
+        style={{ gridTemplateColumns, '--base-width': `${baseWidth}px` } as React.CSSProperties}
+      >
         {/* 表头：列名行（属性列；第 0 组裸项只有列名；其余组含运算符列） */}
-        <div className="grid__corner grid__corner--sub" />
+        <div className="grid__corner grid__corner--sub" style={{ gridColumn: String(C_ROWNUM) }} />
         {/* 分组属性列名（可编辑，位于项1之前） */}
         {Array.from({ length: attrCount }).map((_, a) => (
           <input
             key={`ah-${a}`}
             className="cell cell--header-input attr-header"
+            style={{ gridColumn: String(2 + a), ...(attrMaxWidths[a] ? { width: `${attrMaxWidths[a]}px` } : {}) }}
             value={attributeHeaders[a] ?? ''}
-            placeholder={`分组${a + 1}`}
             onChange={(e) => setAttributeHeader(a, e.target.value)}
           />
         ))}
         {/* 第 0 组列名：项1 [+ 结果] */}
-        <div className="grid__colhead" style={{ gridColumn: `span ${group0HasResult ? 2 : 1}`, display: 'contents' }}>
-          <input
-            className="cell cell--header-input"
-            value={headers[0]?.param1 ?? ''}
-            placeholder="项1"
-            onChange={(e) => setHeader(0, 'param1', e.target.value)}
+        <input
+          className="cell cell--header-input"
+          style={{ gridColumn: String(colItem1), width: `${itemMaxWidth}px` }}
+          value={headers[0]?.param1 ?? ''}
+          onChange={(e) => setHeader(0, 'param1', e.target.value)}
+        />
+        {group0HasResult && (
+          <HeaderResultInput
+            index={0}
+            value={headers[0]?.result ?? ''}
+            minWidth={resultColMaxWidth[0]}
+            onChange={(v) => setHeader(0, 'result', v)}
+            style={{ gridColumn: String(colResult(0)) }}
           />
-          {group0HasResult && (
-            <input
-              className="cell cell--header-input grid__subhead grid__subhead--result"
-              value={headers[0]?.result ?? ''}
-              placeholder="结果"
-              onChange={(e) => setHeader(0, 'result', e.target.value)}
-            />
-          )}
-        </div>
+        )}
         {/* 运算项组列名：运算符 / 项 / = / 结果 */}
         {Array.from({ length: groupCount }).map((_, g) =>
           g === 0 ? null : (
-            <div className="grid__colhead" key={`ch-${g}`} style={{ gridColumn: 'span 4', display: 'contents' }}>
-              <div className="grid__subhead grid__subhead--op subhead--opcol">
+            <Fragment key={`ch-${g}`}>
+              <div
+                className="grid__subhead grid__subhead--op subhead--opcol"
+                style={{ gridColumn: String(colOp(g)) }}
+              >
                 <OperatorButton
                   g={g}
                   op={rows[0]?.groups[g]?.operator ?? '+'}
@@ -264,24 +354,29 @@ export function CalculatorGrid({ output }: Props) {
               </div>
               <input
                 className="cell cell--header-input op-header"
-                style={opMaxWidths[g] ? { width: `${opMaxWidths[g]}px` } : undefined}
+                style={{ gridColumn: String(colParam2(g)), ...(opMaxWidths[g] ? { width: `${opMaxWidths[g]}px` } : {}) }}
                 value={headers[g]?.param2 ?? ''}
-                placeholder="项"
                 onChange={(e) => setHeader(g, 'param2', e.target.value)}
               />
-              <div className="grid__subhead subhead--opcol">
+              <div
+                className="grid__subhead subhead--opcol subhead--eq"
+                style={{ gridColumn: String(colEq(g)) }}
+              >
                 <OperatorIcon op="=" size={24} />
               </div>
-              <input
-                className="cell cell--header-input grid__subhead grid__subhead--result subhead--opcol"
-                style={opMaxWidths[g] ? { width: `${opMaxWidths[g]}px` } : undefined}
+              <HeaderResultInput
+                index={g}
                 value={headers[g]?.result ?? ''}
-                placeholder="结果"
-                onChange={(e) => setHeader(g, 'result', e.target.value)}
+                minWidth={resultColMaxWidth[g]}
+                onChange={(v) => setHeader(g, 'result', v)}
+                style={{ gridColumn: String(colResult(g)) }}
               />
-            </div>
+            </Fragment>
           )
         )}
+
+        {/* 标题行与数据区域之间的分割线 */}
+        <div className="grid__divider" />
 
         {/* 数据行 */}
         {rows.map((row, r) => (
@@ -294,7 +389,12 @@ export function CalculatorGrid({ output }: Props) {
             attrCount={attrCount}
             group0HasResult={group0HasResult}
             resultGroups={resultGroups}
+            itemMaxWidth={itemMaxWidth}
             opMaxWidths={opMaxWidths}
+            attrMaxWidths={attrMaxWidths}
+            baseWidth={baseWidth}
+            resultColMaxWidth={resultColMaxWidth}
+            colMap={{ C_ROWNUM, colItem1, colOp, colParam2, colEq, colResult }}
             decimalPlaces={decimalPlaces}
             setAttribute={setAttribute}
             setParam1={setParam1}
@@ -379,7 +479,12 @@ interface RowProps {
   attrCount: number;
   group0HasResult: boolean;
   resultGroups: number[];
+  itemMaxWidth: number;
   opMaxWidths: number[];
+  attrMaxWidths: number[];
+  baseWidth: number;
+  resultColMaxWidth: number[];
+  colMap: ColMap;
   decimalPlaces: number;
   setAttribute: (r: number, a: number, v: string) => void;
   setParam1: (r: number, v: string) => void;
@@ -396,7 +501,12 @@ function RowView({
   attrCount,
   group0HasResult,
   resultGroups,
+  itemMaxWidth,
   opMaxWidths,
+  attrMaxWidths,
+  baseWidth,
+  resultColMaxWidth,
+  colMap,
   decimalPlaces,
   setAttribute,
   setParam1,
@@ -404,10 +514,13 @@ function RowView({
   onParam1KeyDown,
   onParam2KeyDown,
 }: RowProps) {
+  const { C_ROWNUM, colItem1, colOp, colParam2, colEq, colResult } = colMap;
   return (
     <>
       {/* 行号列（最左） */}
-      <div className="grid__rownum">{r + 1}</div>
+      <div className="grid__rownum" style={{ gridColumn: String(C_ROWNUM) }}>
+        {r + 1}
+      </div>
       {/* 分组属性列：插在行号之后、项1之前 */}
       {Array.from({ length: attrCount }).map((_, a) => (
         <AttrInput
@@ -415,84 +528,141 @@ function RowView({
           r={r}
           a={a}
           value={row.attributes[a] ?? ''}
+          width={attrMaxWidths[a] ?? baseWidth}
           setAttribute={setAttribute}
+          style={{ gridColumn: String(2 + a) }}
         />
       ))}
       {row.groups.map((sg, g) => {
         const gr = result.groups[g];
-        return (
-          <div className="group" key={`${row.id}-${g}`} style={{ display: 'contents' }}>
-            {/* 第 0 组：裸项（仅项1，结果=项1） */}
-            {g === 0 ? (
-              <>
-                <Param1Input
-                  r={r}
-                  g={g}
-                  value={sg.param1 ?? ''}
-                  decimalPlaces={decimalPlaces}
-                  setParam1={setParam1}
-                  onParam1KeyDown={onParam1KeyDown}
-                />
-                {group0HasResult && (
-                  <div
-                    className={
-                      'cell cell--result' +
-                      (gr.result.kind === 'number' ? ' is-filled' : '') +
-                      (gr.result.kind === 'error' ? ' cell--error' : '') +
-                      (gr.skipped ? ' cell--skipped' : '')
-                    }
-                    style={
-                      gr.result.kind === 'error'
-                        ? undefined
-                        : { backgroundColor: resultGreen(resultGroups.indexOf(g), resultGroups.length, gr.result.kind === 'number') }
-                    }
-                    title={gr.result.kind === 'error' ? gr.result.message : ''}
-                  >
-                    {fmt(gr.result)}
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                {/* 运算符：只读图标展示（切换交互已上移到表头） */}
-                <OperatorDisplay op={sg.operator} className="cell--opcol" />
-                {/* 项（param2）：可编辑 */}
-                <Param2Input
-                  r={r}
-                  g={g}
-                  value={sg.param2}
-                  fillWidth={opMaxWidths[g] || 0}
-                  decimalPlaces={decimalPlaces}
-                  setParam2={setParam2}
-                  onParam2KeyDown={onParam2KeyDown}
-                />
-                {/* 等号 */}
-                <div className="cell cell--eq cell--opcol">
-                  <OperatorIcon op="=" size={24} />
-                </div>
-                {/* 结果 */}
-                <div
-                  className={
-                    'cell cell--result cell--opcol' +
-                    (gr.result.kind === 'number' ? ' is-filled' : '') +
-                    (gr.result.kind === 'error' ? ' cell--error' : '') +
-                    (gr.skipped ? ' cell--skipped' : '')
-                  }
-                  style={
-                    gr.result.kind === 'error'
-                      ? undefined
-                      : { backgroundColor: resultGreen(resultGroups.indexOf(g), resultGroups.length, gr.result.kind === 'number') }
-                  }
-                  title={gr.skipped ? '上游为空/错误，已跳过' : gr.result.kind === 'error' ? gr.result.message : ''}
-                >
-                  {fmt(gr.result)}
-                </div>
-              </>
+        return g === 0 ? (
+          <Fragment key={`${row.id}-${g}`}>
+            <Param1Input
+              r={r}
+              g={g}
+              value={sg.param1 ?? ''}
+              width={itemMaxWidth}
+              decimalPlaces={decimalPlaces}
+              setParam1={setParam1}
+              onParam1KeyDown={onParam1KeyDown}
+              style={{ gridColumn: String(colItem1) }}
+            />
+            {group0HasResult && (
+              <ResultCell
+                className={
+                  'cell cell--result' +
+                  (gr.result.kind === 'number' ? ' is-filled' : '') +
+                  (gr.result.kind === 'error' ? ' cell--error' : '') +
+                  (gr.skipped ? ' cell--skipped' : '')
+                }
+                style={{
+                  gridColumn: String(colResult(g)),
+                  ...(gr.result.kind === 'error'
+                    ? {}
+                    : { backgroundColor: resultGreen(resultGroups.indexOf(g), resultGroups.length, gr.result.kind === 'number') }),
+                }}
+                title={gr.result.kind === 'error' ? gr.result.message : ''}
+                text={fmt(gr.result)}
+                minWidth={resultColMaxWidth[g]}
+              />
             )}
-          </div>
+          </Fragment>
+        ) : (
+          <Fragment key={`${row.id}-${g}`}>
+            {/* 运算符：只读图标展示（切换交互已上移到表头） */}
+            <OperatorDisplay
+              op={sg.operator}
+              className="cell--opcol"
+              style={{ gridColumn: String(colOp(g)) }}
+            />
+            {/* 项（param2）：可编辑 */}
+            <Param2Input
+              r={r}
+              g={g}
+              value={sg.param2}
+              width={opMaxWidths[g] ?? baseWidth}
+              decimalPlaces={decimalPlaces}
+              setParam2={setParam2}
+              onParam2KeyDown={onParam2KeyDown}
+              style={{ gridColumn: String(colParam2(g)) }}
+            />
+            {/* 等号 */}
+            <div className="cell cell--eq cell--opcol" style={{ gridColumn: String(colEq(g)) }}>
+              <OperatorIcon op="=" size={24} />
+            </div>
+            {/* 结果 */}
+            <ResultCell
+              className={
+                'cell cell--result cell--opcol' +
+                (gr.result.kind === 'number' ? ' is-filled' : '') +
+                (gr.result.kind === 'error' ? ' cell--error' : '') +
+                (gr.skipped ? ' cell--skipped' : '')
+              }
+              style={{
+                gridColumn: String(colResult(g)),
+                ...(gr.result.kind === 'error'
+                  ? {}
+                  : { backgroundColor: resultGreen(resultGroups.indexOf(g), resultGroups.length, gr.result.kind === 'number') }),
+              }}
+              title={gr.skipped ? '上游为空/错误，已跳过' : gr.result.kind === 'error' ? gr.result.message : ''}
+              text={fmt(gr.result)}
+              minWidth={resultColMaxWidth[g]}
+            />
+          </Fragment>
         );
       })}
     </>
+  );
+}
+
+/** 数据行结果格：宽度随内容自适应（与数字列同一套机制），默认宽度与数字列一致 */
+function ResultCell({
+  className,
+  style,
+  title,
+  text,
+  minWidth,
+}: {
+  className: string;
+  style?: React.CSSProperties;
+  title?: string;
+  text: string;
+  minWidth: number;
+}) {
+  // 结果列默认宽度 = 整列统一最小值（resultColMaxWidth），内容更长时自动撑开不溢出。
+  // 用 min-width 而非固定 width，避免 canvas 测量误差导致截断。
+  return (
+    <div className={className} style={{ ...style, minWidth: `${minWidth}px`, width: 'auto' }} title={title}>
+      {text}
+    </div>
+  );
+}
+
+/** 表头结果列名输入框：可编辑，宽度随内容自适应，默认宽度与数字列一致 */
+function HeaderResultInput({
+  index,
+  value,
+  minWidth,
+  onChange,
+  style,
+}: {
+  index: number;
+  value: string;
+  minWidth: number;
+  onChange: (v: string) => void;
+  style?: React.CSSProperties;
+}) {
+  const ref = useAutoSize<HTMLInputElement>(value, INPUT_FONT, minWidth);
+  return (
+    <input
+      ref={ref}
+      className="cell cell--header-input grid__subhead grid__subhead--result subhead--opcol"
+      data-g={index}
+      data-f="result"
+      style={style}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
   );
 }
 
@@ -528,38 +698,41 @@ function OperatorButton({
 }
 
 /** 运算符只读展示（数据行用）：纯图标，不可点击切换 */
-function OperatorDisplay({ op, className = '' }: { op: Operator; className?: string }) {
+function OperatorDisplay({ op, className = '', style }: { op: Operator; className?: string; style?: React.CSSProperties }) {
   return (
-    <div className={`cell cell--op cell--op-static ${className}`} title={`运算符：${OP_SYMBOLS[op]}`}>
+    <div className={`cell cell--op cell--op-static ${className}`} style={style} title={`运算符：${OP_SYMBOLS[op]}`}>
       <OperatorIcon op={op} size={24} />
     </div>
   );
 }
 
-/** 第0组参数1：可编辑，宽度随输入文字自适应；失焦时按小数位重写 */
+/** 第0组参数1：可编辑，宽度=整列统一列宽（与表头一致，整列严格对齐） */
 function Param1Input({
   r,
   g,
   value,
+  width,
   decimalPlaces,
   setParam1,
   onParam1KeyDown,
+  style,
 }: {
   r: number;
   g: number;
   value: string;
+  width: number;
   decimalPlaces: number;
   setParam1: (r: number, v: string) => void;
   onParam1KeyDown: (e: KeyboardEvent<HTMLInputElement>, r: number, g: number) => void;
+  style?: React.CSSProperties;
 }) {
-  const ref = useAutoSize(value);
   return (
     <input
-      ref={ref}
       className="cell cell--autosize"
       data-r={r}
       data-g={g}
       data-f="param1"
+      style={{ ...style, width: `${width}px` }}
       value={value}
       inputMode="decimal"
       onChange={(e) => setParam1(r, e.target.value)}
@@ -571,59 +744,62 @@ function Param1Input({
 
 /** 链式组参数1：已移除（新模型中运算项的项1隐藏，仅显示运算符+项） */
 
-/** 分组属性列：可编辑文本，宽度随输入文字自适应 */
+/** 分组属性列：可编辑文本，宽度=整列统一列宽（与表头一致，整列严格对齐） */
 function AttrInput({
   r,
   a,
   value,
+  width,
   setAttribute,
+  style,
 }: {
   r: number;
   a: number;
   value: string;
+  width: number;
   setAttribute: (r: number, a: number, v: string) => void;
+  style?: React.CSSProperties;
 }) {
-  const ref = useAutoSize(value);
   return (
     <input
-      ref={ref}
       className="cell cell--autosize cell--attr"
       data-r={r}
       data-g={-1}
       data-f={`attr${a}`}
+      style={{ ...style, width: `${width}px` }}
       value={value}
-      placeholder="分组"
       onChange={(e) => setAttribute(r, a, e.target.value)}
     />
   );
 }
 
-/** 参数2：可编辑，宽度随输入文字自适应；失焦时按小数位重写 */
+/** 参数2：可编辑，宽度=整列统一列宽（与表头一致，整列严格对齐） */
 function Param2Input({
   r,
   g,
   value,
-  fillWidth,
+  width,
   decimalPlaces,
   setParam2,
   onParam2KeyDown,
+  style,
 }: {
   r: number;
   g: number;
   value: string;
-  fillWidth: number;
+  width: number;
   decimalPlaces: number;
   setParam2: (r: number, g: number, v: string) => void;
   onParam2KeyDown: (e: KeyboardEvent<HTMLInputElement>, r: number, g: number) => void;
+  style?: React.CSSProperties;
 }) {
-  const ref = useAutoSize(value, INPUT_FONT, fillWidth);
   return (
     <input
-      ref={ref}
       className="cell cell--autosize cell--opitem"
       data-r={r}
       data-g={g}
       data-f="param2"
+      style={{ ...style, width: `${width}px` }}
       value={value}
       inputMode="decimal"
       onChange={(e) => setParam2(r, g, e.target.value)}

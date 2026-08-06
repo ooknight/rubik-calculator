@@ -1,32 +1,15 @@
 import Decimal from 'decimal.js';
 import { Cell, Group, Operator } from '../core/types';
 import { StoredRow } from './store';
-import { parseOperand } from '../core/engine';
+import { applyOp, parseOperand } from '../core/engine';
 
-Decimal.set({ precision: 30, rounding: Decimal.ROUND_HALF_UP });
-
-/** 计算单组结果（用于链式回填 param1） */
+/** 计算单组结果（用于链式回填 param1），复用引擎的 applyOp 保证运算规则一致 */
 export function evalSingle(p1: string, op: Operator, p2: string): Cell {
-  if (p1.trim() === '' || p2.trim() === '') return { kind: 'empty' };
+  const a = parseOperand(p1);
+  const b = parseOperand(p2);
+  if (a.kind !== 'number' || b.kind !== 'number') return { kind: 'empty' };
   try {
-    const a = new Decimal(p1.trim());
-    const b = new Decimal(p2.trim());
-    let r: Decimal;
-    switch (op) {
-      case '+':
-        r = a.plus(b);
-        break;
-      case '-':
-        r = a.minus(b);
-        break;
-      case '*':
-        r = a.times(b);
-        break;
-      case '/':
-        if (b.isZero()) return { kind: 'error', message: '除零' };
-        r = a.div(b);
-        break;
-    }
+    const r = applyOp(new Decimal(a.value), new Decimal(b.value), op);
     return r.isFinite() ? { kind: 'number', value: r.toString() } : { kind: 'error', message: '溢出' };
   } catch {
     return { kind: 'error', message: '非数字' };
