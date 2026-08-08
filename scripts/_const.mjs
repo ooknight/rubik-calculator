@@ -1,0 +1,28 @@
+import { chromium } from 'playwright-core';
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const browser = await chromium.launch();
+const page = await browser.newPage();
+const errs = [];
+page.on('pageerror', (e) => errs.push('PE:' + e.message));
+await page.goto('http://localhost:5173/', { waitUntil: 'networkidle' });
+await sleep(500);
+await page.locator('.toolbar button[title^="管理自定义常量"]').click();
+await sleep(200);
+await page.locator('.const-panel__add').click();
+await sleep(200);
+const inputs = page.locator('.const-panel__row input');
+await inputs.nth(0).fill('a');
+await inputs.nth(1).fill('增值税');
+await inputs.nth(2).fill('0.13');
+await sleep(200);
+await page.locator('.toolbar button[title="增加一项（运算符 + 项）"]').click();
+await sleep(300);
+// param2 输入 'a' 触发常量转换（input 会变为 const-display）
+const p2 = page.locator('.cell-input').nth(1);
+await p2.click();
+await page.keyboard.type('a', { delay: 50 });
+await sleep(400);
+const constLen = await page.evaluate(() => document.querySelectorAll('.const-display').length);
+const constText = await page.evaluate(() => document.querySelector('.const-display')?.textContent ?? '');
+console.log(JSON.stringify({ constCellCount: constLen, constText, errors: errs.length ? errs : 'none' }, null, 2));
+await browser.close();

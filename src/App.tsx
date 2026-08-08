@@ -7,8 +7,9 @@ import { CalculatorGrid } from './components/CalculatorGrid';
 
 export function App() {
   const rows = useGridStore((s) => s.rows);
-  // 派生：把链式 param1 回填后做全量计算。结果随 rows 变化重算。
-  const output = useMemo(() => computeGrid(deriveForCompute(rows)), [rows]);
+  const constants = useGridStore((s) => s.constants);
+  // 派生：把链式 param1 回填后做全量计算。结果随 rows / 常量变化重算。
+  const output = useMemo(() => computeGrid(deriveForCompute(rows, constants)), [rows, constants]);
 
   return (
     <div className="app">

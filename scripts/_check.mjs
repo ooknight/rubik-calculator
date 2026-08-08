@@ -1,0 +1,15 @@
+import { chromium } from 'playwright-core';
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const browser = await chromium.launch();
+const page = await browser.newPage();
+const errs = [];
+page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
+page.on('pageerror', (e) => errs.push('PE:' + e.message));
+await page.goto('http://localhost:5173/', { waitUntil: 'networkidle' });
+await sleep(800);
+const root = await page.evaluate(() => document.querySelector('#root')?.innerHTML?.slice(0, 400));
+const inputs = await page.evaluate(() => document.querySelectorAll('.cell-input').length);
+console.log('INPUT COUNT:', inputs);
+console.log('ROOT:', root);
+console.log('ERRS:', errs.join(' | ') || 'none');
+await browser.close();
